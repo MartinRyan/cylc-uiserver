@@ -25,7 +25,7 @@ import signal
 
 from graphene_tornado.schema import schema
 from graphene_tornado.tornado_graphql_handler import TornadoGraphQLHandler
-from tornado import ioloop, web
+from tornado import ioloop, web, log
 from tornado.options import define
 
 from handlers import CylcScanHandler
@@ -84,6 +84,7 @@ class CylcUIServer(object):
 
     def __init__(self, port, static, jhub_service_prefix, usertoken,
                  hubtoken, hub_api_url):
+        log.enable_pretty_logging()
         self._port = port
         self._static = str(static)
         self._prefix = str(jhub_service_prefix)
