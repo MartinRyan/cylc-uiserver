@@ -97,12 +97,14 @@ class CylcUIServer(object):
             script_dir = os.path.dirname(__file__)
             self._static = os.path.abspath(os.path.join(
                 script_dir, str(static)))
-        logging.info(f'self._static ==>> {self._static}')
-        logging.info(f'self._prefix ==>> {self._prefix}')
-        logging.info(f'self._port ==>> {self._port}')
-        logging.info(f'self._usertoken ==>> {self._usertoken}')
-        logging.info(f'self._hubtoken ==>> {self._hubtoken}')
-        logging.info(f'self._hub_api_url ==>> {self._hub_api_url}')
+        logging.info(f' Cylc UI Server running on port {self._port}')
+        logging.info(f' serving static files from: {self._static}')
+        logging.debug(f' self._prefix ==>> {self._prefix}')
+        logging.debug(f' self._usertoken ==>> {self._usertoken}')
+        logging.debug(f' self._hubtoken ==>> {self._hubtoken}')
+        logging.debug(f' self._hub_api_url ==>> {self._hub_api_url}')
+        logging.debug(f' JupyterHub Service Prefix: {self._prefix}')
+        logging.debug(f' listen on port {self._port}')
 
     def _make_app(self):
         return Application(
@@ -149,9 +151,6 @@ class CylcUIServer(object):
         app = self._make_app()
         signal.signal(signal.SIGINT, app.signal_handler)
         app.listen(self._port)
-        logging.info(f'JupyterHub Service Prefix: {self._prefix}')
-        logging.info(f'listen on port {self._port}')
-        logging.info(f'serve static files from: {self._static}')
         ioloop.PeriodicCallback(app.try_exit, 100).start()
         try:
             ioloop.IOLoop.current().start()
@@ -184,7 +183,6 @@ def main():
     logging.info(f'usertoken ==> {args.usertoken}')
     logging.info(f'hubtoken ==> {args.hubtoken}')
     logging.info(f'hubapiurl ==> {args.hubapiurl}')
-    logging.info('Starting Cylc UI')
     ui_server.start()
 
 
