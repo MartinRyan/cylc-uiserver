@@ -18,7 +18,7 @@ import json
 import re
 from subprocess import Popen, PIPE
 
-from jupyterhub.services.auth import HubOAuthenticated
+from services.auth import HubOAuthenticated
 from tornado import web
 from typing import List, Union
 
@@ -50,7 +50,6 @@ class CylcScanHandler(HubOAuthenticated, web.RequestHandler):
             if suite:
                 suites.append(suite)
         return suites
-
 
     @web.authenticated
     def get(self):

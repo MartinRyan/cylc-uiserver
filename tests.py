@@ -23,14 +23,14 @@ from tornado.httpclient import HTTPResponse
 from tornado.testing import AsyncHTTPTestCase
 from tornado.web import Application
 
-from cylc_singleuser import *
+from cylc_singleuser import MainHandler, UserProfileHandler, CylcUIServer
 
 
 class MainHandlerTest(AsyncHTTPTestCase):
     """Test for the Main handler"""
     def get_app(self) -> Application:
         self.tempdir = tempfile.mkdtemp(suffix='mainhandlertest')
-        return MyApplication(
+        return Application(
             handlers=[
                 ('/', MainHandler, {"path": self.tempdir})
             ]
@@ -51,11 +51,10 @@ class MainHandlerTest(AsyncHTTPTestCase):
             shutil.rmtree(self.tempdir, ignore_errors=True)
 
 
-
 class UserProfileHandlerTest(AsyncHTTPTestCase):
     """Test for UserProfile handler"""
     def get_app(self) -> Application:
-        return MyApplication(
+        return Application(
             handlers=[
                 ('/userprofile', UserProfileHandler)
             ]
@@ -74,7 +73,7 @@ class UserProfileHandlerTest(AsyncHTTPTestCase):
 
 def test_my_application():
     """Test creating the Tornado app."""
-    my_application = MyApplication(handlers=[])
+    my_application = Application(handlers=[])
     assert not my_application.is_closing
     my_application.signal_handler(None, None)
     assert my_application.is_closing

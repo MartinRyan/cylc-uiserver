@@ -51,7 +51,7 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/cylc/cylc-uiserver/',
-    py_modules=['handlers', 'cylc_singleuser'],
+    py_modules=['handlers', 'cylc_uiserver'],
     python_requires='>=3.7',
     install_requires=install_requires,
     setup_requires=setup_requires,
@@ -59,7 +59,7 @@ setup(
     extras_require=extras_require,
     entry_points={
         'console_scripts': [
-            'cylc-singleuser=cylc_singleuser:main'
+            'cylc-uiserver=cylc_uiserver:main'
         ]
     }
 )
