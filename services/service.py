@@ -131,7 +131,8 @@ class _ServiceSpawner(LocalProcessSpawner):
             # use which to get abspath
             script = shutil.which(cmd[0]) or cmd[0]
             self.log.error(
-                "Permission denied trying to run %r. Does %s have access to this file?",
+                'Permission denied trying to run %r. \
+                 Does %s have access to this file?',
                 script,
                 self.user.name,
             )
@@ -174,8 +175,10 @@ class Service(LoggingConfigurable):
         If the service has an http endpoint, it
         """
     ).tag(input=True)
-    admin = Bool(False, help="Does the service need admin-access to the Hub API?").tag(
-        input=True
+    admin = Bool(False,
+                 help="Does the service need admin-access to the Hub API?"
+                 ).tag(
+                 input=True
     )
     url = Unicode(
         help="""URL of the service.
@@ -214,7 +217,8 @@ class Service(LoggingConfigurable):
         """
         return 'managed' if self.managed else 'external'
 
-    command = Command(minlen=0, help="Command to spawn this service, if managed.").tag(
+    command = Command(minlen=0,
+                      help="Command to spawn this service, if managed.").tag(
         input=True
     )
     cwd = Unicode(help="""The working directory in which to run the service.""").tag(
@@ -277,8 +281,8 @@ class Service(LoggingConfigurable):
     @property
     def oauth_available(self):
         """Is OAuth available for this client?
-
-        Returns True if a server is defined or oauth_redirect_uri is specified manually
+        Returns True if a server is defined or 
+        oauth_redirect_uri is specified manually
         """
         return bool(self.server is not None or self.oauth_redirect_uri)
 
