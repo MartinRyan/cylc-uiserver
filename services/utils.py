@@ -30,7 +30,6 @@ from tornado import web
 from tornado.httpclient import AsyncHTTPClient
 from tornado.httpclient import HTTPError
 from tornado.log import app_log
-from tornado.platform.asyncio import to_asyncio_future
 
 
 def random_port():
@@ -72,7 +71,8 @@ def can_connect(ip, port):
         socket.create_connection((ip, port)).close()
     except socket.error as e:
         if e.errno not in {errno.ECONNREFUSED, errno.ETIMEDOUT}:
-            app_log.error("Unexpected error connecting to %s:%i %s", ip, port, e)
+            app_log.error("Unexpected error connecting to %s:%i %s",
+                          ip, port, e)
         return False
     else:
         return True
@@ -583,7 +583,7 @@ def utcnow():
 def _parse_accept_header(accept):
     """
     Parse the Accept header *accept*
-    
+
     Return a list with 3-tuples of
     [(str(media_type), dict(params), float(q_value)),] ordered by q values.
     If the accept header includes vendor-specific types like::

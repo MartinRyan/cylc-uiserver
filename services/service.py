@@ -221,7 +221,8 @@ class Service(LoggingConfigurable):
                       help="Command to spawn this service, if managed.").tag(
         input=True
     )
-    cwd = Unicode(help="""The working directory in which to run the service.""").tag(
+    cwd = Unicode(
+        help="""The working directory in which to run the service.""").tag(
         input=True
     )
     environment = Dict(
@@ -281,7 +282,7 @@ class Service(LoggingConfigurable):
     @property
     def oauth_available(self):
         """Is OAuth available for this client?
-        Returns True if a server is defined or 
+        Returns True if a server is defined or
         oauth_redirect_uri is specified manually
         """
         return bool(self.server is not None or self.oauth_redirect_uri)
@@ -343,9 +344,8 @@ class Service(LoggingConfigurable):
             cookie_options=self.cookie_options,
             cwd=self.cwd,
             hub=self.hub,
-            user=_MockUser(
-                name=self.user, service=self, server=self.orm.server, host=self.host
-            ),
+            user=_MockUser(name=self.user, service=self,
+                           server=self.orm.server, host=self.host),
             internal_ssl=self.app.internal_ssl,
             internal_certs_location=self.app.internal_certs_location,
             internal_trust_bundles=self.app.internal_trust_bundles,

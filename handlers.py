@@ -18,12 +18,12 @@ import json
 import re
 from subprocess import Popen, PIPE
 
-from services.auth import HubOAuthenticated
-from tornado import web
+from services.auth import HubAuthenticated
+from tornado.web import authenticated, RequestHandler
 from typing import List, Union
 
 
-class CylcScanHandler(HubOAuthenticated, web.RequestHandler):
+class CylcScanHandler(HubAuthenticated, RequestHandler):
 
     def set_default_headers(self):
         self.set_header("Access-Control-Allow-Origin", "*")
@@ -51,7 +51,7 @@ class CylcScanHandler(HubOAuthenticated, web.RequestHandler):
                 suites.append(suite)
         return suites
 
-    @web.authenticated
+    @authenticated
     def get(self):
         cylc_scan_proc = Popen("cylc scan", shell=True, stdout=PIPE)
         cylc_scan_out = cylc_scan_proc.communicate()[0]
