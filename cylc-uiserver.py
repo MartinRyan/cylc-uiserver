@@ -17,7 +17,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import absolute_import
 
+import sys
 import argparse
+import asyncio
 import json
 import logging
 import os.path
@@ -32,33 +34,39 @@ from tornado.web import (Application, RequestHandler, StaticFileHandler,
                          authenticated)
 
 from handlers import CylcScanHandler
-from services.auth import (HubAuthenticated)
+from services.auth import HubAuthenticated
 from services.utils import url_path_join
+from logging.config import dictConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseHandler(RequestHandler):
 
     def get_current_user(self):
         logging.info(f' get_current_user {self.current_user}')
+        logger.info(f' logger get_current_user {self.current_user}')
         return self.current_user
 
     async def prepare(self):
         # get_current_user cannot be a co-routine so set here in prepare
         usertoken = self._usertoken
-        logging.info(f'BaseHandler prepare {usertoken}')
-        if usertoken:
+        hub_api_url = self._hub_api_url
+        if usertoken and hub_api_url:
             self.current_user = await self.get_user_auth(usertoken)
-            logging.info(f' self.current_user {self.current_user}')
+            logger.info(f' self.current_user {self.current_user}')
+        else:
+            self.redirect_to_login()
 
     async def get_user_auth(self, token):
         """Check if the user is authenticated with JupyterHub if the hub
         API endpoint and token are configured.
         Redirect unauthenticated requests to the JupyterHub login page.
         """
-
         usertoken = token
         logging.info(f' token {usertoken}')
-        logging.info(f' self.hub_api_url {self.hub_api_url}')
+        logging.info(f' self._hub_api_url {self._hub_api_url}')
         logging.info(f' self._hub_login_url {self._hub_login_url}')
 
         def redirect_to_login():
@@ -66,12 +74,10 @@ class BaseHandler(RequestHandler):
                           '?' + urlencode({'next': self.request.path}))
 
         try:
-            self.hub_user = self.hub_auth.user_for_token(self._usertoken)
-            logging.info(f' self.hub_user: {self.hub_user}')
-            logging.info(f'if hub returns a success code, user is known')
+            #  if hub returns a success code, user is known
             async_http_client = AsyncHTTPClient()
             response = await async_http_client.fetch(
-                url_path_join(self.hub_api_url,
+                url_path_join(self._hub_api_url,
                               'authorizations/token',
                               usertoken,
                               quote(usertoken, safe='')),
@@ -81,11 +87,12 @@ class BaseHandler(RequestHandler):
             )
             logging.info(f' hub auth response {response.body}')
         except async_http_client.HTTPError as ex:
-            logging.info(f' ex.response.code > {ex.response.code}')
+            logging.error(f' ex.response.code > {ex.response.code}')
+            logging.error(f' error {ex.object}')
             if ex.response.code == 404:
                 # hub does not recognize the cookie == not authenticated
-                logging.info(f' hub does not recognize the token 404')
-                # raise asyncio.Return(redirect_to_login())
+                logging.error(f' hub does not recognize the token 404')
+                raise asyncio.Return(redirect_to_login())
             # let all other errors surface: they're unexpected
             raise ex
         else:
@@ -104,13 +111,18 @@ class MainHandler(BaseHandler, HubAuthenticated, RequestHandler):
         self._static = path
         logging.info(f'initialize path: {self._static}')
 
-    @authenticated
+    # @authenticated
     def get(self):
         """Render the UI prototype."""
         logging.info(f'MainHandler')
-        logging.info(f'get current user{self.get_current_user()}')
-        index = os.path.join(self._static, "index.html")
-        self.write(open(index).read())
+        user_model = self.get_current_user()
+        if user_model:
+            logging.info(f' user_model{user_model}')
+            index = os.path.join(self._static, "index.html")
+            self.write(open(index).read())
+        else:
+            self.redirect(url_path_join(self._hub_login_url) +
+                          '?' + urlencode({'next': self.request.path}))
 
 
 class UserProfileHandler(BaseHandler, HubAuthenticated, RequestHandler):
@@ -121,12 +133,16 @@ class UserProfileHandler(BaseHandler, HubAuthenticated, RequestHandler):
         self.set_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
         self.set_header("Content-Type", 'application/json')
 
-    @authenticated
+    # @authenticated
     def get(self):
         logging.info(f'UserProfileHandler')
-        logging.info(f'get current user{self.get_current_user()}')
         user_model = self.get_current_user()
-        self.write(json.dumps(user_model, indent=1, sort_keys=True))
+        if user_model:
+            logging.info(f' usermodel => {user_model}')
+            self.write(json.dumps(user_model, indent=1, sort_keys=True))
+        else:
+            self.redirect(url_path_join(self._hub_login_url) +
+                          '?' + urlencode({'next': self.request.path}))
 
 
 class Application(Application):
@@ -220,7 +236,6 @@ class CylcUIServer(object):
 
 
 def main():
-    log.enable_pretty_logging()
     parser = argparse.ArgumentParser(description='Start Cylc UI')
     parser.add_argument('--port', action='store', dest='port', type=int,
                         default=8888)
@@ -233,11 +248,10 @@ def main():
     parser.add_argument('--hub_login_url', action='store',
                         dest='hub_login_url')
     args = parser.parse_args()
-    jhub_service_prefix = args.prefix
-    logging.info(f'JupyterHub Service Prefix: {jhub_service_prefix}')
+    logger.info(f'jupyterhub_service_prefix {args.prefix}')
     ui_server = CylcUIServer(
         port=args.port, static=args.static,
-        jhub_service_prefix=jhub_service_prefix,
+        jhub_service_prefix=args.prefix,
         usertoken=args.usertoken, hubtoken=args.hubtoken,
         hub_api_url=args.hub_api_url,
         hub_base_url=args.hub_base_url,
@@ -246,7 +260,41 @@ def main():
     ui_server.start()
 
 
+def init_logging(access_to_stdout=False):
+    if access_to_stdout:
+        access_log = logging.getLogger('tornado.access')
+        access_log.propagate = False
+        # make sure access log is enabled even if error level is WARNING|ERROR
+        # access_log.setLevel(logging.INFO)
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        access_log.addHandler(stdout_handler)
+        logger.info('logger init ===>>>>>')
+
+
+def bootstrap():
+    logging_config = dict(
+        version=1,
+        formatters={
+            'f': {'format':
+                  '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'}
+        },
+        handlers={
+            'h': {'class': 'logging.StreamHandler(sys.stdout)',
+                  'formatter': 'f',
+                  'level': logging.DEBUG}
+        },
+        loggers={
+            'tornado.general': {'handlers': ['h'],
+                                'level': logging.DEBUG}
+        }
+    )
+    dictConfig(logging_config)
+    log.enable_pretty_logging()
+    init_logging(True)  # set access_to_stdout to True
+
+
 if __name__ == '__main__':
+    log.enable_pretty_logging()
     main()
 
 

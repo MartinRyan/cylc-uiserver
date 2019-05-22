@@ -68,7 +68,7 @@ class UserProfileHandlerTest(AsyncHTTPTestCase):
             assert "Access-Control-Allow-Headers" in response.headers
             assert "Access-Control-Allow-Methods" in response.headers
             assert "Content-Type" in response.headers
-            assert b'yossarian' in  response.body
+            assert b'yossarian' in response.body
 
 
 def test_my_application():
