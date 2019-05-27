@@ -12,40 +12,50 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import absolute_import
 
-import sys
 import argparse
 import asyncio
 import json
 import logging
 import os.path
 import signal
+import sys
+from logging import Formatter, StreamHandler
+from logging.config import dictConfig
 from urllib.parse import quote, urlencode
 
 from graphene_tornado.schema import schema
 from graphene_tornado.tornado_graphql_handler import TornadoGraphQLHandler
-from tornado import ioloop, log
-from tornado.httpclient import AsyncHTTPClient
-from tornado.web import (Application, RequestHandler, StaticFileHandler,
-                         authenticated)
-
 from handlers import CylcScanHandler
 from services.auth import HubAuthenticated
 from services.utils import url_path_join
-from logging.config import dictConfig
+from tornado import ioloop, log
+from tornado.httpclient import AsyncHTTPClient
+import tornado.options
+from tornado.options import define, options, parse_command_line
+from tornado.web import (Application, RequestHandler, StaticFileHandler,
+                         authenticated)
 
+define('port', default=8888, help='run port')
+define('static', default='cylc-web/', type=str, help='static files path')
+define('prefix', type=str, help='jupyterhub-service-prefix')
+define('usertoken',type=str, help='jupyterhub user authtoken')
+define('hubtoken', type=str, help='jupyterhub api token', metavar='hubtoken')
+define('hub_api_url', help='jupyterhub api url', metavar='hub_api_url')
+define('hub_base_url', type=str, help='base url - usually /user/username', metavar='hub_base_url')
+define('hub_login_url', type=str, help='jupyterhub login url', metavar='hub_login_url')
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class BaseHandler(RequestHandler):
 
     def get_current_user(self):
-        logging.info(f' get_current_user {self.current_user}')
+        logger.info(f' get_current_user {self.current_user}')
         logger.info(f' logger get_current_user {self.current_user}')
         return self.current_user
 
@@ -65,9 +75,9 @@ class BaseHandler(RequestHandler):
         Redirect unauthenticated requests to the JupyterHub login page.
         """
         usertoken = token
-        logging.info(f' token {usertoken}')
-        logging.info(f' self._hub_api_url {self._hub_api_url}')
-        logging.info(f' self._hub_login_url {self._hub_login_url}')
+        logger.info(f' token {usertoken}')
+        logger.info(f' self._hub_api_url {self._hub_api_url}')
+        logger.info(f' self._hub_login_url {self._hub_login_url}')
 
         def redirect_to_login():
             self.redirect(url_path_join(self._hub_login_url) +
@@ -85,7 +95,7 @@ class BaseHandler(RequestHandler):
                     'Authorization': 'token ' + usertoken
                 }
             )
-            logging.info(f' hub auth response {response.body}')
+            logger.info(f' hub auth response {response.body}')
         except async_http_client.HTTPError as ex:
             logging.error(f' ex.response.code > {ex.response.code}')
             logging.error(f' error {ex.object}')
@@ -96,7 +106,7 @@ class BaseHandler(RequestHandler):
             # let all other errors surface: they're unexpected
             raise ex
         else:
-            logging.info(f' hub auth response {response.body}')
+            logger.info(f' hub auth response {response.body}')
             # self.user = response.json()
             return response.body
 
@@ -109,15 +119,15 @@ class MainHandler(BaseHandler, HubAuthenticated, RequestHandler):
 
     def initialize(self, path):
         self._static = path
-        logging.info(f'initialize path: {self._static}')
+        logger.info(f'initialize path: {self._static}')
 
     # @authenticated
     def get(self):
         """Render the UI prototype."""
-        logging.info(f'MainHandler')
+        logger.info(f'MainHandler')
         user_model = self.get_current_user()
         if user_model:
-            logging.info(f' user_model{user_model}')
+            logger.info(f' user_model{user_model}')
             index = os.path.join(self._static, "index.html")
             self.write(open(index).read())
         else:
@@ -135,10 +145,10 @@ class UserProfileHandler(BaseHandler, HubAuthenticated, RequestHandler):
 
     # @authenticated
     def get(self):
-        logging.info(f'UserProfileHandler')
+        logger.info(f'UserProfileHandler')
         user_model = self.get_current_user()
         if user_model:
-            logging.info(f' usermodel => {user_model}')
+            logger.info(f' usermodel => {user_model}')
             self.write(json.dumps(user_model, indent=1, sort_keys=True))
         else:
             self.redirect(url_path_join(self._hub_login_url) +
@@ -149,20 +159,20 @@ class Application(Application):
     is_closing = False
 
     def signal_handler(self, signum, frame):
-        logging.info('exiting...')
+        logger.info('exiting...')
         self.is_closing = True
 
     def try_exit(self):
         if self.is_closing:
             ioloop.IOLoop.instance().stop()
-            logging.info('exit success')
+            logger.info('exit success')
 
 
 class CylcUIServer(object):
 
     def __init__(self, port, static, jhub_service_prefix, usertoken,
                  hubtoken, hub_api_url, hub_base_url, hub_login_url):
-        self._port = port
+        self._port = int(port)
         self._static = str(static)
         self._prefix = str(jhub_service_prefix)
         self._usertoken = usertoken
@@ -170,24 +180,27 @@ class CylcUIServer(object):
         self._hub_api_url = hub_api_url
         self._hub_base_url = hub_base_url
         self._hub_login_url = hub_login_url
-        if os.path.isabs(str(static)):
-            self._static = str(static)
+        if os.path.isabs(static):
+            self._static = static
         else:
             script_dir = os.path.dirname(__file__)
             self._static = os.path.abspath(os.path.join(
-                script_dir, str(static)))
+                script_dir, static))
+        logger.info(f' Cylc UI Server running on port {self._port}')
         logging.info(f' Cylc UI Server running on port {self._port}')
-        logging.info(f' serving static files from: {self._static}')
-        logging.info(f' self._prefix ==>> {self._prefix}')
-        logging.info(f' self._usertoken ==>> {self._usertoken}')
-        logging.info(f' self._hubtoken ==>> {self._hubtoken}')
-        logging.info(f' self._hub_api_url ==>> {self._hub_api_url}')
-        logging.info(f' self._hub_base_url ==>> {self._hub_base_url}')
-        logging.info(f' self._hub_login_url ==>> {self._hub_login_url}')
-        logging.info(f' JupyterHub Service Prefix: {self._prefix}')
+        logger.info(f' serving static files from: {self._static}')
+        logger.info(f' self._prefix ==>> {self._prefix}')
+        logger.info(f' self._usertoken ==>> {self._usertoken}')
+        logger.info(f' self._hubtoken ==>> {self._hubtoken}')
+        logger.info(f' self._hub_api_url ==>> {self._hub_api_url}')
+        logger.info(f' self._hub_base_url ==>> {self._hub_base_url}')
+        logger.info(f' self._hub_login_url ==>> {self._hub_login_url}')
+        logger.info(f' JupyterHub Service Prefix: {self._prefix}')
+        logger.info(f'options.prefix init() {options.prefix}')
+        logger.info(options.prefix)
+        
 
     def _make_app(self):
-        log.enable_pretty_logging()
         return Application(
             static_path=self._static,
             debug=True,
@@ -224,7 +237,7 @@ class CylcUIServer(object):
         )
 
     def start(self):
-        logging.info('starting cylc ui')
+        logger.info('starting cylc ui')
         app = self._make_app()
         signal.signal(signal.SIGINT, app.signal_handler)
         app.listen(self._port)
@@ -259,42 +272,65 @@ def main():
         )
     ui_server.start()
 
+# def main():
+
+#     # parser = argparse.ArgumentParser(description='Start Cylc UI')
+#     # parser.add_argument('--port', action='store', dest='port', type=int,
+#     #                     default=8888)
+#     # parser.add_argument('--static', action='store', dest='static')
+#     # parser.add_argument('--prefix', action='store', dest='prefix')
+#     # parser.add_argument('--usertoken', action='store', dest='usertoken')
+#     # parser.add_argument('--hubtoken', action='store', dest='hubtoken')
+#     # parser.add_argument('--hub_api_url', action='store', dest='hub_api_url')
+#     # parser.add_argument('--hub_base_url', action='store', dest='hub_base_url')
+#     # parser.add_argument('--hub_login_url', action='store',
+#     #                     dest='hub_login_url')
+#     # args = parser.parse_args()
+#     options.parse_command_line()
+#     logger.info(f'tornado.options.prefix main() {options.prefix}')
+#     logger.info(f'args.authtoken main() {args.authtoken}')
+#     logger.info(f'args.port main() {args.port}')
+#     ui_server = CylcUIServer(
+#         port=options.port, static=options.static,
+#         jhub_service_prefix=options.prefix,
+#         usertoken=options.usertoken, hubtoken=options.hubtoken,
+#         hub_api_url=options.hub_api_url,
+#         hub_base_url=options.hub_base_url,
+#         hub_login_url=options.hub_login_url
+#         )
+#     ui_server.start()
+
 
 def init_logging(access_to_stdout=False):
     if access_to_stdout:
-        access_log = logging.getLogger('tornado.access')
-        access_log.propagate = False
+        # access_log = logging.getLogger('tornado.access')
+        # access_log.propagate = False
         # make sure access log is enabled even if error level is WARNING|ERROR
-        # access_log.setLevel(logging.INFO)
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        access_log.addHandler(stdout_handler)
+        # access_log.setLevel(logger.info)
+        # stdout_handler = StreamHandler(sys.stdout)
+        # access_log.addHandler(stdout_handler)
+        # logger.info('logger init ===>>>>>')
+        logger.setLevel(logging.DEBUG)
+        # handler = logging.FileHandler('test.log')
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(logging.DEBUG)
+        formatter = Formatter('%(levelname)s %(asctime)s path:%(pathname)s lineno:%(lineno)s] %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
         logger.info('logger init ===>>>>>')
 
 
+
 def bootstrap():
-    logging_config = dict(
-        version=1,
-        formatters={
-            'f': {'format':
-                  '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'}
-        },
-        handlers={
-            'h': {'class': 'logging.StreamHandler(sys.stdout)',
-                  'formatter': 'f',
-                  'level': logging.DEBUG}
-        },
-        loggers={
-            'tornado.general': {'handlers': ['h'],
-                                'level': logging.DEBUG}
-        }
-    )
-    dictConfig(logging_config)
-    log.enable_pretty_logging()
+    options.parse_command_line()
+    # log.enable_pretty_logging()
     init_logging(True)  # set access_to_stdout to True
 
 
 if __name__ == '__main__':
-    log.enable_pretty_logging()
+    bootstrap()
+    # logger.info(f'name main port ===>>>>> {options.port}')
+    # logger.info(f'name main prefix ===>>>>> {options.prefix}')
     main()
 
 
